@@ -1,0 +1,13 @@
+.env
+output/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+build/
+.streamlit/
+node_modules/
+.agents/
+skills-lock.json
+.claude/skills/
