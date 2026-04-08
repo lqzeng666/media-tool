@@ -75,21 +75,11 @@ def render():
             st.rerun()
     with col2:
         if st.button("保存并重新开始", use_container_width=True):
-            # Auto-save before reset
             from app.state import reset, SAVE_KEYS
-            import base64 as b64
-            state_to_save = {}
-            for key in SAVE_KEYS:
-                val = st.session_state.get(key)
-                if val is not None:
-                    if isinstance(val, bytes):
-                        state_to_save[key] = b64.b64encode(val).decode()
-                    else:
-                        state_to_save[key] = val
+            from core.project_store import save_project
+            state_to_save = {k: st.session_state.get(k) for k in SAVE_KEYS if st.session_state.get(k) is not None}
             try:
-                api_post("/api/projects/save",
-                         json={"state": state_to_save, "name": st.session_state.get("topic", "")},
-                         timeout=10.0)
+                save_project(state_to_save, st.session_state.get("topic", ""))
                 st.toast("项目已自动保存")
             except Exception:
                 pass

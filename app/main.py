@@ -199,7 +199,7 @@ def run():
 
 def _render_sidebar_projects():
     """Render save/load project controls in sidebar."""
-    from app.http import api_post, api_get, api_delete
+    from core.project_store import list_projects, load_project, delete_project
 
     st.caption("项目管理")
 
@@ -212,10 +212,9 @@ def _render_sidebar_projects():
         if st.button("保存", use_container_width=True, key="btn_save"):
             _save_current_project(proj_name)
 
-    # Load history
+    # Load history - read directly from disk (fast, no HTTP)
     try:
-        resp = api_get("/api/projects/list", timeout=5.0)
-        projects = resp.json().get("projects", [])
+        projects = list_projects()
     except Exception:
         projects = []
 
@@ -233,46 +232,36 @@ def _render_sidebar_projects():
                 with col_del:
                     if st.button("删除", key=f"del_{p['id']}", use_container_width=True):
                         try:
-                            api_delete(f"/api/projects/{p['id']}", timeout=5.0)
+                            delete_project(p["id"])
                         except Exception:
                             pass
                         st.rerun()
 
 
 def _save_current_project(name: str = ""):
-    """Save current session state as a project."""
-    from app.http import api_post
+    """Save current session state as a project (direct disk write, no HTTP)."""
+    from core.project_store import save_project
     from app.state import SAVE_KEYS
 
     state_to_save = {}
     for key in SAVE_KEYS:
         val = st.session_state.get(key)
         if val is not None:
-            # Convert bytes to base64 for JSON serialization
-            if isinstance(val, bytes):
-                import base64
-                state_to_save[key] = base64.b64encode(val).decode()
-            else:
-                state_to_save[key] = val
+            state_to_save[key] = val
 
     try:
-        resp = api_post(
-            "/api/projects/save",
-            json={"state": state_to_save, "name": name or st.session_state.get("topic", "")},
-            timeout=10.0,
-        )
+        save_project(state_to_save, name or st.session_state.get("topic", ""))
         st.sidebar.success("已保存")
     except Exception as e:
         st.sidebar.error(f"保存失败: {e}")
 
 
 def _load_project(project_id: str):
-    """Load a project into session state."""
-    from app.http import api_get
+    """Load a project into session state (direct disk read, no HTTP)."""
+    from core.project_store import load_project
 
     try:
-        resp = api_get(f"/api/projects/load/{project_id}", timeout=10.0)
-        state = resp.json().get("state", {})
+        state = load_project(project_id)
         for key, val in state.items():
             st.session_state[key] = val
         st.rerun()
