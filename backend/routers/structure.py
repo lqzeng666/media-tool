@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/structure", tags=["structure"])
 @router.post("/generate", response_model=OutlineResponse)
 async def create_outline(req: GenerateOutlineRequest):
     """Generate a structured presentation outline from topic and materials."""
-    outline = generate_outline(req.topic, req.materials)
+    outline = generate_outline(req.topic, req.materials, instruction=req.instruction)
     return OutlineResponse(outline=outline)
 
 

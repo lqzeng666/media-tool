@@ -62,12 +62,14 @@ def _format_materials(materials: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
-def generate_outline(topic: str, materials: list[dict]) -> PresentationOutline:
+def generate_outline(topic: str, materials: list[dict], instruction: str = "") -> PresentationOutline:
     """Generate a structured presentation outline from topic and source materials."""
     prompt = STRUCTURING_PROMPT.format(
         topic=topic,
         materials=_format_materials(materials),
     )
+    if instruction:
+        prompt += f"\n\n额外要求: {instruction}"
 
     response = chat(
         messages=[{"role": "user", "content": prompt}],

@@ -6,6 +6,7 @@ from core.content_structurer import Section, PresentationOutline
 class GenerateOutlineRequest(BaseModel):
     topic: str
     materials: list[dict]
+    instruction: str = ""
 
 
 class RegenerateSectionRequest(BaseModel):
