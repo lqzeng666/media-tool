@@ -1,22 +1,18 @@
 #!/bin/bash
-# Start both backend and frontend on Render
-# Render sets $PORT for the externally-exposed port (default 10000)
+# Start both backend and frontend
+# Backend is internal only (127.0.0.1), Streamlit is exposed
 
-export STREAMLIT_PORT=${PORT:-8501}
-export BACKEND_PORT=8100
+export BACKEND_URL="http://localhost:8100"
 
-# Ensure backend URL points to internal port
-export BACKEND_URL="http://localhost:${BACKEND_PORT}"
+# Start FastAPI backend (internal only)
+uvicorn backend.server:app --host 127.0.0.1 --port 8100 &
 
-# Start FastAPI backend (internal, not exposed)
-uvicorn backend.server:app --host 127.0.0.1 --port "$BACKEND_PORT" &
-
-# Wait for backend to be ready
 sleep 3
 
-# Start Streamlit on Render's exposed port
+# Start Streamlit on the port Render expects
+# Render reads EXPOSE from Dockerfile, so we use 8501
 exec streamlit run app/main.py \
-  --server.port "$STREAMLIT_PORT" \
+  --server.port 8501 \
   --server.address 0.0.0.0 \
   --server.headless true \
   --server.enableCORS false \
