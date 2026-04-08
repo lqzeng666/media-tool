@@ -15,6 +15,7 @@ COPY . .
 # HF Spaces uses port 7860
 ENV PORT=7860
 ENV BACKEND_URL=http://localhost:8100
+ENV PYTHONPATH=/app
 EXPOSE 7860
 
 COPY start.sh .
