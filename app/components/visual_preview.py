@@ -9,7 +9,8 @@ from app.http import api_post
 
 
 def render():
-    st.header("步骤 4: 生成输出")
+    st.markdown("### 步骤四 · 多模态内容生产")
+    st.caption("选择输出格式，一键生成多种形态的内容")
 
     outline = st.session_state.outline
     if outline is None:

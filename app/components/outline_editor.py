@@ -7,7 +7,8 @@ from app.http import api_post
 
 
 def render():
-    st.header("步骤 3: 内容结构化")
+    st.markdown("### 步骤三 · 结构化提取")
+    st.caption("AI 分析素材并生成结构化大纲，可自由编辑调整")
     st.markdown(f"当前主题: **{st.session_state.topic}** | 素材: {len(st.session_state.materials)} 篇")
 
     # Generate outline

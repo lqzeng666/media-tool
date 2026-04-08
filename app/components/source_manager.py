@@ -7,7 +7,8 @@ from app.http import api_post
 
 
 def render():
-    st.header("步骤 2: 提供信息素材")
+    st.markdown("### 步骤二 · 勾选信息")
+    st.caption("提供相关素材链接，或让 AI 自动搜索")
     st.markdown(f"当前主题: **{st.session_state.topic}**")
 
     tab_manual, tab_auto = st.tabs(["🔗 手动提供链接", "🤖 AI 自动搜索"])
