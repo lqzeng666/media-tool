@@ -48,13 +48,25 @@ def render():
     materials_count = len(st.session_state.materials)
     st.markdown(f"主题：**{topic}**　｜　素材：**{materials_count}** 篇")
 
+    # Skip option
+    st.markdown("---")
+    col_skip, _ = st.columns([2, 5])
+    with col_skip:
+        if st.button("跳过此步，直接生成 →", help="跳过结构化提取，在步骤四中由各 skill 自动处理内容结构"):
+            st.session_state.outline = "skipped"
+            go_to_step(4)
+            st.rerun()
+
     # If outline already generated, show editor
-    if st.session_state.outline is not None:
+    if st.session_state.outline is not None and st.session_state.outline != "skipped":
         _render_outline_editor()
         return
 
-    # Otherwise show generation options
-    st.markdown("---")
+    if st.session_state.outline == "skipped":
+        return
+
+    # Generation options
+    st.markdown("")
     tab_ai, tab_template = st.tabs(["AI 智能生成", "选择框架模板"])
 
     with tab_ai:
