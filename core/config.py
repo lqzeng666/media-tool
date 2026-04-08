@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
+    dashscope_api_key: str = ""
     backend_url: str = "http://localhost:8100"
     max_source_length: int = 5000
     output_dir: str = "./output"

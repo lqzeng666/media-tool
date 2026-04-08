@@ -103,10 +103,10 @@ class ComicRequest(BaseModel):
 
 @router.post("/generate-comic")
 async def create_comic(req: ComicRequest):
-    """Generate comic panels as images."""
+    """Generate comic panels as AI-rendered images via DashScope."""
     import base64
-    from core.comic_generator import render_comic
-    script, images = await render_comic(req.topic, req.content, art=req.art)
+    from core.comic_generator import render_comic_ai
+    script, images = render_comic_ai(req.topic, req.content, art=req.art)
     return {
         "script": script,
         "images": [base64.b64encode(img).decode() for img in images],
