@@ -54,17 +54,40 @@ COMIC_PROMPT = """\
 只输出 JSON。"""
 
 
-def generate_comic_script(topic: str, content: str) -> dict:
-    """Generate a comic script from content."""
-    response = chat(
-        messages=[{"role": "user", "content": COMIC_PROMPT.format(
-            topic=topic, content=content[:3000],
-        )}],
-        temperature=0.8,
-        max_tokens=4096,
-        response_format={"type": "json_object"},
-    )
-    return json.loads(response)
+def generate_comic_script(topic: str, content: str, max_retries: int = 2) -> dict:
+    """Generate a comic script from content, with JSON parse retry."""
+    for attempt in range(max_retries + 1):
+        response = chat(
+            messages=[{"role": "user", "content": COMIC_PROMPT.format(
+                topic=topic, content=content[:3000],
+            )}],
+            temperature=0.7,
+            max_tokens=4096,
+            response_format={"type": "json_object"},
+        )
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError:
+            # Try to extract JSON from response
+            import re
+            match = re.search(r'\{.*\}', response, re.DOTALL)
+            if match:
+                try:
+                    return json.loads(match.group())
+                except json.JSONDecodeError:
+                    pass
+            if attempt < max_retries:
+                logger.warning("JSON parse failed, retrying (attempt %d)", attempt + 1)
+                continue
+            # Last resort: return minimal script
+            logger.error("Failed to parse comic script after %d attempts", max_retries + 1)
+            return {
+                "title": topic,
+                "panels": [
+                    {"type": "cover", "scene": f"Cover illustration about {topic}", "text_overlay": topic, "narrator": ""},
+                    {"type": "panel", "scene": f"Educational illustration explaining {topic}", "dialogue": "", "narrator": content[:200]},
+                ],
+            }
 
 
 def _build_image_prompt(panel: dict, art_style: str, title: str, panel_index: int) -> str:
