@@ -1,5 +1,13 @@
 """Media Tool - 多模态资讯展示工具"""
 
+import sys
+from pathlib import Path
+
+# Ensure project root is in sys.path (fixes Streamlit's path handling in Docker)
+_root = str(Path(__file__).resolve().parent.parent)
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
 import streamlit as st
 
 from app.state import init_state
