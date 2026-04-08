@@ -122,27 +122,18 @@ class VideoComposeRequest(BaseModel):
 
 @router.post("/compose-video")
 async def compose_video_endpoint(req: VideoComposeRequest):
-    """Generate a video from slide images + optional TTS audio."""
+    """Generate a video from slide images + per-slide TTS narration."""
     from core.infographic_generator import render_slides_to_images
     from core.video_composer import compose_video
 
-    # Render slides
     images = await render_slides_to_images(req.outline)
 
-    # Optional TTS audio
-    audio_bytes = None
-    if req.with_audio:
-        from core.podcast_generator import generate_podcast_script, generate_audio
-        script = generate_podcast_script(req.outline)
-        audio_bytes = await generate_audio(script, req.voice)
-
-    # Compose video
-    seconds_per_slide = 5.0
-    if audio_bytes and images:
-        # Estimate duration from audio (rough: 150 chars/min for Chinese)
-        seconds_per_slide = max(3.0, 60.0 / max(len(images), 1))
-
-    video_bytes = await compose_video(images, audio_bytes, seconds_per_slide=seconds_per_slide)
+    video_bytes = await compose_video(
+        images,
+        outline=req.outline,
+        with_audio=req.with_audio,
+        voice=req.voice,
+    )
 
     return Response(
         content=video_bytes,
