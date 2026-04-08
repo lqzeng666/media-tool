@@ -112,7 +112,7 @@ def render_comic_ai(topic: str, content: str, art: str = "ligne-claire") -> tupl
         logger.info("Generating comic panel %d/%d", i + 1, len(panels))
 
         try:
-            urls = generate_image(prompt, size="1024*1024", timeout=90)
+            urls = generate_image(prompt, size="1024*1024", timeout=180)
             if urls:
                 img_bytes = download_image(urls[0])
                 images.append(img_bytes)

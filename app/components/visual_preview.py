@@ -216,7 +216,7 @@ def _render_comic_tab(ctx):
                 resp = api_post(
                     "/api/visuals/generate-comic",
                     json={"topic": ctx["topic"], "content": content, "art": art},
-                    timeout=180.0,
+                    timeout=600.0,
                 )
                 data = resp.json()
                 st.session_state.comic_script = data["script"]

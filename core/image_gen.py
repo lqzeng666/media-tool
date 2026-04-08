@@ -28,7 +28,7 @@ def generate_image(
     model: str = "wanx-v1",
     size: str = "1024*1024",
     n: int = 1,
-    timeout: float = 120.0,
+    timeout: float = 180.0,
 ) -> list[str]:
     """Generate images via DashScope. Returns list of image URLs.
 
