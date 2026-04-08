@@ -95,13 +95,66 @@ async def create_xhs_images(req: XhsRequest):
     }
 
 
+class ComicRequest(BaseModel):
+    topic: str
+    content: str
+    art: str = "ligne-claire"
+
+
+@router.post("/generate-comic")
+async def create_comic(req: ComicRequest):
+    """Generate comic panels as images."""
+    import base64
+    from core.comic_generator import render_comic
+    script, images = await render_comic(req.topic, req.content, art=req.art)
+    return {
+        "script": script,
+        "images": [base64.b64encode(img).decode() for img in images],
+        "count": len(images),
+    }
+
+
+class VideoComposeRequest(BaseModel):
+    outline: PresentationOutline
+    with_audio: bool = False
+    voice: str = "zh-CN-YunxiNeural"
+
+
+@router.post("/compose-video")
+async def compose_video_endpoint(req: VideoComposeRequest):
+    """Generate a video from slide images + optional TTS audio."""
+    from core.infographic_generator import render_slides_to_images
+    from core.video_composer import compose_video
+
+    # Render slides
+    images = await render_slides_to_images(req.outline)
+
+    # Optional TTS audio
+    audio_bytes = None
+    if req.with_audio:
+        from core.podcast_generator import generate_podcast_script, generate_audio
+        script = generate_podcast_script(req.outline)
+        audio_bytes = await generate_audio(script, req.voice)
+
+    # Compose video
+    seconds_per_slide = 5.0
+    if audio_bytes and images:
+        # Estimate duration from audio (rough: 150 chars/min for Chinese)
+        seconds_per_slide = max(3.0, 60.0 / max(len(images), 1))
+
+    video_bytes = await compose_video(images, audio_bytes, seconds_per_slide=seconds_per_slide)
+
+    return Response(
+        content=video_bytes,
+        media_type="video/mp4",
+        headers={"Content-Disposition": "attachment; filename=video.mp4"},
+    )
+
+
 @router.post("/setup-video")
 async def setup_video(req: VideoSetupRequest):
-    """Set up Remotion project with outline data. Returns project path."""
+    """Set up Remotion project with outline data."""
     from core.video_generator import write_outline_data, _ensure_remotion_project
     project_dir = _ensure_remotion_project()
     write_outline_data(req.outline)
-    return {
-        "project_dir": str(project_dir),
-        "message": "Remotion project ready. Run 'npm run render' in the project directory.",
-    }
+    return {"project_dir": str(project_dir)}

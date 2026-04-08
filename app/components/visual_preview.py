@@ -175,117 +175,54 @@ def _render_xhs_tab(ctx):
 # ─── Comic Tab ───────────────────────────────────────────
 
 def _render_comic_tab(ctx):
-    st.markdown("生成知识漫画或封面图，由 baoyu-comic / baoyu-cover-image skill 驱动。")
+    st.markdown("AI 生成知识漫画，直接在页面预览。")
 
-    sub_comic, sub_cover = st.tabs(["知识漫画", "封面图"])
+    art_options = {
+        "ligne-claire": "丁丁历险记风（推荐）",
+        "manga": "日漫风",
+        "ink-brush": "水墨风",
+        "chalk": "粉笔风",
+    }
 
-    with sub_comic:
-        st.markdown("将内容转化为多格漫画，支持多种画风。")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        art = st.selectbox("画风", options=list(art_options.keys()),
+                           format_func=lambda k: art_options[k], key="comic_art")
+    with col2:
+        st.markdown("")
+        gen_clicked = st.button("生成漫画", type="primary", key="gen_comic")
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            art_style = st.selectbox("画风", options=[
-                "ligne-claire", "manga", "realistic", "ink-brush", "chalk", "minimalist",
-            ], format_func=lambda x: {
-                "ligne-claire": "丁丁历险记风（默认）",
-                "manga": "日漫风",
-                "realistic": "写实风",
-                "ink-brush": "水墨风",
-                "chalk": "粉笔风",
-                "minimalist": "极简风",
-            }.get(x, x), key="comic_art")
-        with col2:
-            tone = st.selectbox("氛围", options=[
-                "neutral", "warm", "dramatic", "energetic", "vintage",
-            ], format_func=lambda x: {
-                "neutral": "中性（默认）",
-                "warm": "温暖",
-                "dramatic": "戏剧性",
-                "energetic": "活力",
-                "vintage": "复古",
-            }.get(x, x), key="comic_tone")
-        with col3:
-            layout = st.selectbox("布局", options=[
-                "standard", "cinematic", "four-panel", "webtoon",
-            ], format_func=lambda x: {
-                "standard": "标准（默认）",
-                "cinematic": "电影分镜",
-                "four-panel": "四格漫画",
-                "webtoon": "条漫",
-            }.get(x, x), key="comic_layout")
+    if gen_clicked:
+        with st.spinner("AI 正在创作知识漫画..."):
+            try:
+                content = _prepare_content_markdown(ctx)
+                resp = api_post(
+                    "/api/visuals/generate-comic",
+                    json={"topic": ctx["topic"], "content": content, "art": art},
+                    timeout=180.0,
+                )
+                data = resp.json()
+                st.session_state.comic_script = data["script"]
+                st.session_state.comic_images = data["images"]
+            except Exception as e:
+                st.error(f"生成失败: {e}")
 
-        if st.button("生成漫画内容", type="primary", key="gen_comic"):
-            md_content = _prepare_content_markdown(ctx)
-            # Save content file for skill
-            import os
-            os.makedirs("output", exist_ok=True)
-            with open("output/comic-source.md", "w", encoding="utf-8") as f:
-                f.write(md_content)
+    if st.session_state.get("comic_images"):
+        script = st.session_state.comic_script
+        images = st.session_state.comic_images
+        st.markdown("---")
+        st.markdown(f"**{script.get('title', '漫画')}** — {len(images)} 格")
 
-            st.success("内容已保存到 `output/comic-source.md`")
-            st.markdown("在 Claude Code 中执行以下命令生成漫画：")
-            st.code(
-                f"/baoyu-comic output/comic-source.md --art {art_style} --tone {tone} --layout {layout} --lang zh",
-                language="bash",
-            )
-
-    with sub_cover:
-        st.markdown("为内容生成精美封面图。")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            cover_type = st.selectbox("类型", options=[
-                "conceptual", "hero", "typography", "metaphor", "scene", "minimal",
-            ], format_func=lambda x: {
-                "conceptual": "概念图（推荐）",
-                "hero": "主视觉",
-                "typography": "文字排版",
-                "metaphor": "隐喻",
-                "scene": "场景",
-                "minimal": "极简",
-            }.get(x, x), key="cover_type")
-        with col2:
-            cover_palette = st.selectbox("色调", options=[
-                "warm", "elegant", "cool", "dark", "vivid", "pastel", "mono",
-            ], format_func=lambda x: {
-                "warm": "暖色调",
-                "elegant": "优雅",
-                "cool": "冷色调",
-                "dark": "暗黑",
-                "vivid": "鲜艳",
-                "pastel": "粉彩",
-                "mono": "黑白",
-            }.get(x, x), key="cover_palette")
-
-        col3, col4 = st.columns(2)
-        with col3:
-            cover_rendering = st.selectbox("渲染风格", options=[
-                "flat-vector", "hand-drawn", "painterly", "digital", "pixel",
-            ], format_func=lambda x: {
-                "flat-vector": "扁平矢量（推荐）",
-                "hand-drawn": "手绘",
-                "painterly": "油画",
-                "digital": "数字",
-                "pixel": "像素",
-            }.get(x, x), key="cover_rendering")
-        with col4:
-            cover_aspect = st.selectbox("比例", options=[
-                "16:9", "1:1", "3:4", "2.35:1",
-            ], key="cover_aspect")
-
-        if st.button("生成封面图", type="primary", key="gen_cover"):
-            md_content = _prepare_content_markdown(ctx)
-            import os
-            os.makedirs("output", exist_ok=True)
-            with open("output/cover-source.md", "w", encoding="utf-8") as f:
-                f.write(md_content)
-
-            st.success("内容已保存到 `output/cover-source.md`")
-            st.markdown("在 Claude Code 中执行以下命令生成封面：")
-            st.code(
-                f"/baoyu-cover-image output/cover-source.md --type {cover_type} --palette {cover_palette} --rendering {cover_rendering} --aspect {cover_aspect} --lang zh",
-                language="bash",
-            )
+        cols = st.columns(2)
+        for i, img_b64 in enumerate(images):
+            img_bytes = base64.b64decode(img_b64)
+            panel = script.get("panels", [{}])[i] if i < len(script.get("panels", [])) else {}
+            with cols[i % 2]:
+                st.image(img_bytes, caption=f"#{i+1} {panel.get('scene', '')[:30]}",
+                         use_container_width=True)
+                st.download_button("下载", data=img_bytes,
+                                   file_name=f"comic-{i+1:02d}.png", mime="image/png",
+                                   key=f"dl_comic_{i}")
 
 
 # ─── Infographic Tab ─────────────────────────────────────
@@ -354,7 +291,7 @@ def _render_infographic_tab(ctx):
 # ─── Video Tab ───────────────────────────────────────────
 
 def _render_video_tab(ctx):
-    st.markdown("使用 Remotion 生成动画视频。")
+    st.markdown("将幻灯片合成为视频，可选配音。")
 
     if not ctx["has_outline"]:
         st.caption("需要先生成结构化大纲。")
@@ -367,19 +304,38 @@ def _render_video_tab(ctx):
         return
 
     outline = ctx["outline"]
-    if st.button("初始化 Remotion 项目", type="primary", key="setup_video"):
-        with st.spinner("设置中..."):
-            try:
-                resp = api_post("/api/visuals/setup-video",
-                               json={"outline": outline}, timeout=180.0)
-                st.session_state.video_project_dir = resp.json()["project_dir"]
-                st.success("Remotion 项目已就绪！")
-            except Exception as e:
-                st.error(f"失败: {e}")
 
-    if st.session_state.get("video_project_dir"):
-        d = st.session_state.video_project_dir
-        st.code(f"cd {d}\nnpm run dev    # 预览\nnpm run render # 渲染视频", language="bash")
+    with_audio = st.checkbox("添加 AI 配音", value=True, key="video_audio")
+    if with_audio:
+        voice = st.selectbox("语音", options=[
+            "zh-CN-YunxiNeural", "zh-CN-XiaoxiaoNeural",
+            "zh-CN-YunjianNeural", "zh-CN-XiaoyiNeural",
+        ], format_func=lambda v: {
+            "zh-CN-YunxiNeural": "云希（男声）",
+            "zh-CN-XiaoxiaoNeural": "晓晓（女声）",
+            "zh-CN-YunjianNeural": "云健（男声，沉稳）",
+            "zh-CN-XiaoyiNeural": "晓艺（女声，活泼）",
+        }.get(v, v), key="video_voice")
+    else:
+        voice = "zh-CN-YunxiNeural"
+
+    if st.button("生成视频", type="primary", key="gen_video"):
+        with st.spinner("正在生成视频（渲染幻灯片 + 合成音频 + 编码 MP4）..."):
+            try:
+                resp = api_post(
+                    "/api/visuals/compose-video",
+                    json={"outline": outline, "with_audio": with_audio, "voice": voice},
+                    timeout=300.0,
+                )
+                st.session_state.video_bytes = resp.content
+            except Exception as e:
+                st.error(f"生成失败: {e}")
+
+    if st.session_state.get("video_bytes"):
+        st.markdown("---")
+        st.video(st.session_state.video_bytes, format="video/mp4")
+        st.download_button("下载 MP4", data=st.session_state.video_bytes,
+                           file_name="video.mp4", mime="video/mp4", key="dl_video")
 
 
 # ─── Podcast Tab ─────────────────────────────────────────

@@ -21,6 +21,9 @@ def init_state():
         "video_project_dir": None,
         "xhs_cards": None,
         "xhs_images": None,
+        "comic_script": None,
+        "comic_images": None,
+        "video_bytes": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -34,7 +37,8 @@ def go_to_step(step: int):
 def reset():
     for key in ["topic", "urls_text", "materials", "fetch_errors", "outline", "ppt_bytes",
                  "trending_topics", "search_results", "slide_images", "podcast_script",
-                 "podcast_audio", "video_project_dir", "xhs_cards", "xhs_images"]:
+                 "podcast_audio", "video_project_dir", "xhs_cards", "xhs_images",
+                 "comic_script", "comic_images", "video_bytes"]:
         if key in st.session_state:
             del st.session_state[key]
     st.session_state.current_step = 1
