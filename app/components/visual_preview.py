@@ -68,14 +68,31 @@ def render():
 
     # Navigation
     st.markdown("---")
-    col1, _, col3 = st.columns([1, 6, 1])
+    col1, col2, col3 = st.columns([1, 1, 5])
     with col1:
         if st.button("← 上一步", use_container_width=True):
             go_to_step(3)
             st.rerun()
-    with col3:
-        if st.button("重新开始", use_container_width=True):
-            from app.state import reset
+    with col2:
+        if st.button("保存并重新开始", use_container_width=True):
+            # Auto-save before reset
+            from app.state import reset, SAVE_KEYS
+            import base64 as b64
+            state_to_save = {}
+            for key in SAVE_KEYS:
+                val = st.session_state.get(key)
+                if val is not None:
+                    if isinstance(val, bytes):
+                        state_to_save[key] = b64.b64encode(val).decode()
+                    else:
+                        state_to_save[key] = val
+            try:
+                api_post("/api/projects/save",
+                         json={"state": state_to_save, "name": st.session_state.get("topic", "")},
+                         timeout=10.0)
+                st.toast("项目已自动保存")
+            except Exception:
+                pass
             reset()
             st.rerun()
 

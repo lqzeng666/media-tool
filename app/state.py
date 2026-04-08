@@ -2,6 +2,13 @@
 
 import streamlit as st
 
+# Keys that should be saved/loaded for project persistence
+SAVE_KEYS = [
+    "current_step", "topic", "urls_text", "materials", "outline",
+    "ppt_bytes", "slide_images", "podcast_script", "podcast_audio",
+    "xhs_cards", "xhs_images", "comic_script", "comic_images", "video_bytes",
+]
+
 
 def init_state():
     """Initialize session state with default values."""
@@ -35,10 +42,7 @@ def go_to_step(step: int):
 
 
 def reset():
-    for key in ["topic", "urls_text", "materials", "fetch_errors", "outline", "ppt_bytes",
-                 "trending_topics", "search_results", "slide_images", "podcast_script",
-                 "podcast_audio", "video_project_dir", "xhs_cards", "xhs_images",
-                 "comic_script", "comic_images", "video_bytes"]:
+    for key in SAVE_KEYS + ["fetch_errors", "trending_topics", "search_results", "video_project_dir"]:
         if key in st.session_state:
             del st.session_state[key]
     st.session_state.current_step = 1
