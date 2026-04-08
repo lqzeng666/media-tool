@@ -1,3 +1,12 @@
+---
+title: Media Tool
+emoji: 📰
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+---
+
 # Media Tool - 多模态资讯展示工具
 
 自动化多模态资讯展示工具，支持从主题选择到多种格式输出的完整流水线。
