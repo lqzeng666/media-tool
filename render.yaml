@@ -9,4 +9,3 @@ services:
       - key: BACKEND_URL
         value: http://localhost:8100
     healthCheckPath: /
-    port: 8501
