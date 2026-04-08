@@ -18,8 +18,9 @@ RUN playwright install --with-deps chromium
 # Copy application code
 COPY . .
 
-# Only expose Streamlit port, backend is internal
-EXPOSE 8501
+# Render uses $PORT env var (default 10000)
+ENV PORT=10000
+EXPOSE 10000
 
 # Start script
 COPY start.sh .
