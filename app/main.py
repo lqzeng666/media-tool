@@ -76,6 +76,57 @@ CUSTOM_CSS = """
         font-weight: 600 !important;
     }
     h3 { color: #4A4A4A !important; }
+
+    /* ─── 移动端适配 ─── */
+    @media (max-width: 768px) {
+        /* 主内容区缩小内边距 */
+        .main .block-container {
+            max-width: 100% !important;
+            padding: 1rem 0.8rem !important;
+        }
+        /* 侧边栏默认收起时的按钮更大 */
+        section[data-testid="stSidebar"] {
+            min-width: 240px !important;
+        }
+        /* 标题字号缩小 */
+        h1 { font-size: 1.4rem !important; }
+        h2 { font-size: 1.2rem !important; }
+        h3 { font-size: 1.1rem !important; }
+        /* Tab 文字缩小，适应窄屏 */
+        .stTabs [data-baseweb="tab"] {
+            font-size: 0.75rem !important;
+            padding: 6px 8px !important;
+        }
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 2px !important;
+            overflow-x: auto;
+        }
+        /* 按钮自适应 */
+        .stButton > button {
+            font-size: 0.85rem !important;
+            padding: 6px 12px !important;
+        }
+        /* 输入框全宽 */
+        .stTextInput, .stTextArea, .stSelectbox {
+            width: 100% !important;
+        }
+        /* 图片网格单列 */
+        [data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+        }
+    }
+
+    /* 小屏幕手机 */
+    @media (max-width: 480px) {
+        .main .block-container {
+            padding: 0.5rem 0.5rem !important;
+        }
+        .step-item {
+            padding: 6px 8px !important;
+            font-size: 0.8rem !important;
+        }
+    }
 </style>
 """
 
