@@ -27,13 +27,14 @@ async def create_ppt(req: GeneratePPTRequest):
 
 class SlideImagesRequest(BaseModel):
     outline: PresentationOutline
+    with_illustrations: bool = False
 
 
 @router.post("/generate-slide-images")
 async def create_slide_images(req: SlideImagesRequest):
-    """Generate slide images from an outline. Returns JSON with base64 images."""
+    """Generate slide images with optional AI illustrations."""
     import base64
-    images = await render_slides_to_images(req.outline)
+    images = await render_slides_to_images(req.outline, with_illustrations=req.with_illustrations)
     result = [base64.b64encode(img).decode() for img in images]
     return {"images": result, "count": len(result)}
 
@@ -118,6 +119,7 @@ class VideoComposeRequest(BaseModel):
     outline: PresentationOutline
     with_audio: bool = False
     voice: str = "zh-CN-YunxiNeural"
+    with_illustrations: bool = False
 
 
 @router.post("/compose-video")
@@ -126,7 +128,7 @@ async def compose_video_endpoint(req: VideoComposeRequest):
     from core.infographic_generator import render_slides_to_images
     from core.video_composer import compose_video
 
-    images = await render_slides_to_images(req.outline)
+    images = await render_slides_to_images(req.outline, with_illustrations=req.with_illustrations)
 
     video_bytes = await compose_video(
         images,

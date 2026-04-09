@@ -86,3 +86,29 @@ def download_image(url: str) -> bytes:
         resp = client.get(url)
         resp.raise_for_status()
         return resp.content
+
+
+def generate_and_download(prompt: str, size: str = "1024*1024") -> bytes:
+    """Generate one image and return its bytes. Returns empty bytes on failure."""
+    try:
+        urls = generate_image(prompt, size=size, timeout=120)
+        if urls:
+            return download_image(urls[0])
+    except Exception as e:
+        logger.warning("Image generation failed: %s", e)
+    return b""
+
+
+def generate_illustrations_for_outline(outline) -> list[bytes]:
+    """Generate one illustration per section using image_prompt field.
+
+    Returns list of image bytes (one per section). Empty bytes for failures.
+    """
+    images = []
+    for i, sec in enumerate(outline.sections):
+        prompt = sec.image_prompt or f"Professional illustration about: {sec.title}"
+        prompt += ". Clean, modern, flat design illustration, no text, suitable as a presentation visual."
+        logger.info("Generating illustration %d/%d: %s", i + 1, len(outline.sections), sec.title)
+        img = generate_and_download(prompt, size="1280*720")
+        images.append(img)
+    return images

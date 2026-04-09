@@ -12,23 +12,68 @@ from core.content_structurer import PresentationOutline
 
 logger = logging.getLogger(__name__)
 
+NARRATION_PROMPT = """\
+你是一位专业的视频旁白撰稿人。请为以下演示文稿的每一页撰写口播旁白。
+
+标题: {title}
+副标题: {subtitle}
+
+各页内容:
+{pages_content}
+
+要求:
+1. 为每一页写一段旁白（包括标题页和结尾页）
+2. 语言自然流畅、有故事感，像在给朋友讲一个有趣的话题
+3. 不要照搬要点原文，要用口语化的方式重新表达和扩展
+4. 加入过渡语句，让各页之间衔接自然
+5. 每页旁白控制在 50-120 字
+6. 标题页：用引人入胜的方式介绍主题
+7. 结尾页：总结要点 + 引导互动
+
+请严格按以下 JSON 格式输出:
+{{
+  "narrations": ["标题页旁白", "第1页旁白", "第2页旁白", ..., "结尾页旁白"]
+}}
+
+只输出 JSON。"""
+
 
 def _generate_slide_narrations(outline: PresentationOutline) -> list[str]:
-    """Generate a short narration text for each slide, matching the slide content."""
-    narrations = []
+    """Generate storytelling narrations for each slide using AI."""
+    from core.ai_client import chat
+    import json
 
-    # Title slide
-    narrations.append(f"{outline.title}。{outline.subtitle}")
+    pages = []
+    pages.append(f"[标题页] {outline.title} — {outline.subtitle}")
+    for i, sec in enumerate(outline.sections, 1):
+        bullets = "；".join(sec.bullets)
+        pages.append(f"[第{i}页] {sec.title}: {bullets}")
+    pages.append("[结尾页] 总结与互动")
 
-    # Content slides
+    try:
+        response = chat(
+            messages=[{"role": "user", "content": NARRATION_PROMPT.format(
+                title=outline.title,
+                subtitle=outline.subtitle,
+                pages_content="\n".join(pages),
+            )}],
+            temperature=0.8,
+            max_tokens=4096,
+            response_format={"type": "json_object"},
+        )
+        data = json.loads(response)
+        narrations = data.get("narrations", [])
+        if narrations:
+            return narrations
+    except Exception as e:
+        logger.warning("AI narration failed, falling back: %s", e)
+
+    # Fallback: simple narration
+    result = [f"大家好，今天我们来聊聊{outline.title}。{outline.subtitle}"]
     for sec in outline.sections:
-        points = "；".join(sec.bullets)
-        narrations.append(f"{sec.title}。{points}")
-
-    # End slide
-    narrations.append("以上就是本次内容的全部分享，感谢观看。")
-
-    return narrations
+        result.append(f"接下来看{sec.title}。" + "；".join(sec.bullets))
+    result.append("以上就是今天分享的全部内容，感谢观看，我们下次再见。")
+    return result
 
 
 async def _generate_slide_audio(text: str, voice: str) -> bytes:

@@ -269,11 +269,15 @@ def _render_infographic_tab(ctx):
 
     with col_img:
         st.markdown("**幻灯片图片**")
+        with_illust = st.checkbox("AI 配图", value=True, key="slide_illust",
+                                  help="为每页生成 AI 插图（需要约1-2分钟）")
         if st.button("生成图片", key="gen_images"):
-            with st.spinner("渲染中..."):
+            tip = "渲染幻灯片 + AI 生成配图..." if with_illust else "渲染中..."
+            with st.spinner(tip):
                 try:
                     resp = api_post("/api/visuals/generate-slide-images",
-                                   json={"outline": outline}, timeout=120.0)
+                                   json={"outline": outline, "with_illustrations": with_illust},
+                                   timeout=600.0)
                     st.session_state.slide_images = resp.json()["images"]
                 except Exception as e:
                     st.error(f"失败: {e}")
@@ -326,13 +330,21 @@ def _render_video_tab(ctx):
     else:
         voice = "zh-CN-YunxiNeural"
 
+    with_illust = st.checkbox("AI 配图", value=True, key="video_illust",
+                              help="为幻灯片生成 AI 插图")
+
     if st.button("生成视频", type="primary", key="gen_video"):
-        with st.spinner("正在生成视频（渲染幻灯片 + 合成音频 + 编码 MP4）..."):
+        with st.spinner("正在生成视频（AI 配图 + 故事旁白 + 编码 MP4），请耐心等待..."):
             try:
                 resp = api_post(
                     "/api/visuals/compose-video",
-                    json={"outline": outline, "with_audio": with_audio, "voice": voice},
-                    timeout=300.0,
+                    json={
+                        "outline": outline,
+                        "with_audio": with_audio,
+                        "voice": voice,
+                        "with_illustrations": with_illust,
+                    },
+                    timeout=600.0,
                 )
                 st.session_state.video_bytes = resp.content
             except Exception as e:

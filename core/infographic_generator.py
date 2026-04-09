@@ -1,201 +1,126 @@
-"""Infographic / slide image generation using baoyu-skills methodology.
-
-Generates structured content markdown from the outline, suitable for
-baoyu-infographic or baoyu-slide-deck skills. Also provides a direct
-HTML-to-image rendering fallback via Playwright.
-"""
+"""Infographic / slide image generation with AI illustrations."""
 from __future__ import annotations
 
-import asyncio
-import io
+import base64
 import logging
 from pathlib import Path
+from typing import Union
 
-from core.ai_client import chat
 from core.content_structurer import PresentationOutline
 
 logger = logging.getLogger(__name__)
 
 
 def prepare_slide_deck_content(outline: PresentationOutline) -> str:
-    """Convert outline to a markdown file suitable for baoyu-slide-deck."""
+    """Convert outline to markdown for baoyu-slide-deck."""
     lines = [f"# {outline.title}", "", f"> {outline.subtitle}", ""]
-
     for sec in outline.sections:
         lines.append(f"## {sec.title}")
-        lines.append("")
         for b in sec.bullets:
             lines.append(f"- {b}")
         lines.append("")
-
     return "\n".join(lines)
 
 
-def prepare_infographic_content(outline: PresentationOutline) -> str:
-    """Convert outline to a markdown file suitable for baoyu-infographic."""
-    return prepare_slide_deck_content(outline)
-
-
-SLIDE_HTML_TEMPLATE = """\
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{
-    width: 1280px; height: 720px;
-    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-    overflow: hidden;
-  }}
-  .slide {{
-    width: 1280px; height: 720px;
-    display: flex; flex-direction: column; justify-content: center;
-    padding: 60px 80px;
-    position: relative;
-  }}
-  /* Title slide */
-  .slide.title-slide {{
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-    color: white;
-  }}
-  .slide.title-slide .accent-line {{
-    width: 120px; height: 4px;
-    background: #00d2ff; margin-bottom: 24px;
-  }}
-  .slide.title-slide h1 {{
-    font-size: 48px; font-weight: 700;
-    line-height: 1.3; margin-bottom: 16px;
-  }}
-  .slide.title-slide .subtitle {{
-    font-size: 22px; color: #aaa; font-weight: 300;
-  }}
-  /* Content slide */
-  .slide.content-slide {{
-    background: linear-gradient(180deg, #16213e 0%, #1a1a2e 100%);
-    color: white;
-  }}
-  .slide.content-slide .section-num {{
-    font-size: 14px; color: #00d2ff; font-weight: 600;
-    margin-bottom: 12px;
-  }}
-  .slide.content-slide h2 {{
-    font-size: 36px; font-weight: 700;
-    margin-bottom: 12px; line-height: 1.3;
-  }}
-  .slide.content-slide .accent-line {{
-    width: 80px; height: 3px;
-    background: #00d2ff; margin-bottom: 32px;
-  }}
-  .slide.content-slide .bullet {{
-    display: flex; align-items: flex-start;
-    margin-bottom: 18px; font-size: 20px;
-    line-height: 1.5; color: #ccc;
-  }}
-  .slide.content-slide .bullet .dot {{
-    color: #00d2ff; margin-right: 16px;
-    font-size: 12px; margin-top: 6px;
-    flex-shrink: 0;
-  }}
-  /* End slide */
-  .slide.end-slide {{
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    color: white; text-align: center;
-    align-items: center;
-  }}
-  .slide.end-slide h1 {{
-    font-size: 48px; margin-bottom: 20px;
-  }}
-  .slide.end-slide .sub {{
-    font-size: 18px; color: #888;
-  }}
-</style>
-</head>
-<body>
-{slides_html}
-</body>
-</html>
+SLIDE_CSS = """
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: 1280px; height: 720px; font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; overflow: hidden; }
+.slide { width: 1280px; height: 720px; display: flex; padding: 48px 56px; position: relative; }
+.slide.title-slide { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: white; flex-direction: column; justify-content: center; }
+.slide.title-slide .accent { width: 100px; height: 4px; background: #00d2ff; margin-bottom: 24px; border-radius: 2px; }
+.slide.title-slide h1 { font-size: 44px; font-weight: 700; line-height: 1.3; margin-bottom: 16px; }
+.slide.title-slide .sub { font-size: 20px; color: #9aa; }
+.slide.content-slide { background: linear-gradient(180deg, #16213e 0%, #1a1a2e 100%); color: white; }
+.slide.content-slide .left { flex: 1; display: flex; flex-direction: column; justify-content: center; padding-right: 40px; }
+.slide.content-slide .right { width: 420px; display: flex; align-items: center; justify-content: center; }
+.slide.content-slide .right img { max-width: 100%; max-height: 560px; border-radius: 12px; object-fit: cover; }
+.slide.content-slide .right .placeholder { width: 100%; height: 360px; background: rgba(255,255,255,0.05); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #445; font-size: 14px; }
+.slide.content-slide .num { font-size: 14px; color: #00d2ff; font-weight: 600; margin-bottom: 12px; }
+.slide.content-slide h2 { font-size: 32px; font-weight: 700; margin-bottom: 10px; line-height: 1.3; }
+.slide.content-slide .line { width: 60px; height: 3px; background: #00d2ff; margin-bottom: 28px; border-radius: 2px; }
+.slide.content-slide .bullet { display: flex; align-items: flex-start; margin-bottom: 14px; font-size: 18px; line-height: 1.6; color: #ccc; }
+.slide.content-slide .bullet .dot { color: #00d2ff; margin-right: 14px; font-size: 10px; margin-top: 7px; flex-shrink: 0; }
+.slide.end-slide { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+.slide.end-slide h1 { font-size: 44px; margin-bottom: 16px; }
+.slide.end-slide .sub { font-size: 16px; color: #667; }
 """
 
 
-def _build_title_slide_html(outline: PresentationOutline) -> str:
-    return f"""<div class="slide title-slide" id="slide-0">
-  <div class="accent-line"></div>
+def _html_page(body: str) -> str:
+    return f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>{SLIDE_CSS}</style></head><body>{body}</body></html>'
+
+
+def _title_slide(outline: PresentationOutline) -> str:
+    return _html_page(f'''<div class="slide title-slide">
+  <div class="accent"></div>
   <h1>{outline.title}</h1>
-  <div class="subtitle">{outline.subtitle}</div>
-</div>"""
+  <div class="sub">{outline.subtitle}</div>
+</div>''')
 
 
-def _build_content_slide_html(index: int, title: str, bullets: list[str]) -> str:
+def _content_slide(index: int, title: str, bullets: list[str], img_b64: str = "") -> str:
     bullets_html = "\n".join(
-        f'    <div class="bullet"><span class="dot">●</span><span>{b}</span></div>'
+        f'<div class="bullet"><span class="dot">●</span><span>{b}</span></div>'
         for b in bullets
     )
-    return f"""<div class="slide content-slide" id="slide-{index}">
-  <div class="section-num">{index:02d}</div>
-  <h2>{title}</h2>
-  <div class="accent-line"></div>
-{bullets_html}
-</div>"""
+    if img_b64:
+        img_html = f'<img src="data:image/png;base64,{img_b64}" />'
+    else:
+        img_html = '<div class="placeholder"></div>'
+
+    return _html_page(f'''<div class="slide content-slide">
+  <div class="left">
+    <div class="num">{index:02d}</div>
+    <h2>{title}</h2>
+    <div class="line"></div>
+    {bullets_html}
+  </div>
+  <div class="right">{img_html}</div>
+</div>''')
 
 
-def _build_end_slide_html() -> str:
-    return """<div class="slide end-slide" id="slide-end">
+def _end_slide() -> str:
+    return _html_page('''<div class="slide end-slide">
   <h1>谢谢观看</h1>
   <div class="sub">Generated by Media Tool</div>
-</div>"""
+</div>''')
 
 
-def build_slides_html(outline: PresentationOutline) -> list[tuple[str, str]]:
-    """Build individual HTML pages for each slide.
-
-    Returns list of (slide_id, full_html) tuples.
-    """
-    slides = []
-    # Title
-    slides.append(("slide-0", SLIDE_HTML_TEMPLATE.format(
-        slides_html=_build_title_slide_html(outline)
-    )))
-    # Content
-    for i, sec in enumerate(outline.sections, 1):
-        slides.append((f"slide-{i}", SLIDE_HTML_TEMPLATE.format(
-            slides_html=_build_content_slide_html(i, sec.title, sec.bullets)
-        )))
-    # End
-    slides.append(("slide-end", SLIDE_HTML_TEMPLATE.format(
-        slides_html=_build_end_slide_html()
-    )))
-    return slides
-
-
-async def render_slides_to_images(outline: PresentationOutline) -> list[bytes]:
-    """Render each slide as a PNG image using Playwright."""
+async def render_slides_to_images(
+    outline: PresentationOutline,
+    with_illustrations: bool = False,
+) -> list[bytes]:
+    """Render slides as PNG images. Optionally generates AI illustrations per section."""
     from playwright.async_api import async_playwright
 
-    slides = build_slides_html(outline)
-    images = []
+    # Generate illustrations if requested
+    section_images = []
+    if with_illustrations:
+        from core.image_gen import generate_illustrations_for_outline
+        raw_images = generate_illustrations_for_outline(outline)
+        section_images = [
+            base64.b64encode(img).decode() if img else ""
+            for img in raw_images
+        ]
 
+    # Pad if needed
+    while len(section_images) < len(outline.sections):
+        section_images.append("")
+
+    # Build HTML pages
+    pages = [_title_slide(outline)]
+    for i, sec in enumerate(outline.sections):
+        pages.append(_content_slide(i + 1, sec.title, sec.bullets, section_images[i]))
+    pages.append(_end_slide())
+
+    # Render
+    images = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page(viewport={"width": 1280, "height": 720})
-
-        for slide_id, html in slides:
+        for html in pages:
             await page.set_content(html, wait_until="networkidle")
-            screenshot = await page.screenshot(type="png")
-            images.append(screenshot)
-
+            images.append(await page.screenshot(type="png"))
         await browser.close()
 
     return images
-
-
-def save_slide_images(images: list[bytes], output_dir: str | Path) -> list[Path]:
-    """Save slide images to files."""
-    out = Path(output_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    paths = []
-    for i, img in enumerate(images):
-        path = out / f"slide-{i:02d}.png"
-        path.write_bytes(img)
-        paths.append(path)
-    return paths
