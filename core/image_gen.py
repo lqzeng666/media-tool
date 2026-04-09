@@ -88,6 +88,75 @@ def download_image(url: str) -> bytes:
         return resp.content
 
 
+def submit_task(prompt: str, size: str = "1024*1024", model: str = "wanx-v1") -> str:
+    """Submit an image generation task. Returns task_id."""
+    with httpx.Client(timeout=30, proxy=None) as client:
+        resp = client.post(
+            DASHSCOPE_SUBMIT_URL,
+            headers=_headers(),
+            json={
+                "model": model,
+                "input": {"prompt": prompt},
+                "parameters": {"size": size, "n": 1},
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["output"]["task_id"]
+
+
+def poll_task(task_id: str, timeout: float = 120.0) -> list[str]:
+    """Poll a submitted task until completion. Returns image URLs."""
+    start = time.time()
+    while time.time() - start < timeout:
+        with httpx.Client(timeout=30, proxy=None) as client:
+            resp = client.get(
+                DASHSCOPE_TASK_URL.format(task_id=task_id),
+                headers={"Authorization": f"Bearer {settings.dashscope_api_key}"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        status = data["output"]["task_status"]
+        if status == "SUCCEEDED":
+            return [r["url"] for r in data["output"].get("results", []) if r.get("url")]
+        elif status in ("FAILED", "UNKNOWN"):
+            raise RuntimeError(data["output"].get("message", "Failed"))
+        time.sleep(3)
+    raise TimeoutError(f"Task {task_id} timed out")
+
+
+def generate_batch(prompts: list[str], size: str = "1024*1024") -> list[bytes]:
+    """Generate multiple images in parallel. Returns list of image bytes."""
+    # Submit all tasks at once
+    task_ids = []
+    for prompt in prompts:
+        try:
+            tid = submit_task(prompt, size=size)
+            task_ids.append(tid)
+            logger.info("Submitted task %s", tid)
+        except Exception as e:
+            logger.warning("Failed to submit task: %s", e)
+            task_ids.append(None)
+
+    # Poll all tasks
+    results = []
+    for i, tid in enumerate(task_ids):
+        if tid is None:
+            results.append(b"")
+            continue
+        try:
+            urls = poll_task(tid, timeout=120)
+            if urls:
+                results.append(download_image(urls[0]))
+            else:
+                results.append(b"")
+        except Exception as e:
+            logger.warning("Task %d failed: %s", i, e)
+            results.append(b"")
+
+    return results
+
+
 def generate_and_download(prompt: str, size: str = "1024*1024") -> bytes:
     """Generate one image and return its bytes. Returns empty bytes on failure."""
     try:

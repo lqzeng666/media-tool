@@ -89,9 +89,9 @@ XHS_OUTLINE_PROMPT = """\
 1. 生成 5-8 张卡片的内容，包括封面、内容卡和结尾
 2. 封面要有吸引眼球的标题（可用 emoji）
 3. 每张内容卡包含一个核心要点，文字精简有力
-4. 结尾卡包含总结和互动引导（收藏/关注/评论）
-5. 语言风格活泼、口语化，符合小红书平台调性
-6. 每张卡片的文字控制在 50-150 字以内
+4. 内容卡尽量包含可视化数据（百分比、数字对比、评分等），用 stats 字段
+5. 结尾卡包含总结和互动引导
+6. 语言风格活泼、口语化
 
 请严格按以下 JSON 格式输出:
 {{
@@ -100,13 +100,16 @@ XHS_OUTLINE_PROMPT = """\
       "type": "cover",
       "title": "封面大标题",
       "subtitle": "一句话钩子",
-      "tags": ["标签1", "标签2"]
+      "tags": ["标签1", "标签2"],
+      "image_prompt": "封面配图描述（英文）"
     }},
     {{
       "type": "content",
       "title": "卡片标题",
       "points": ["要点1", "要点2", "要点3"],
-      "highlight": "核心金句"
+      "highlight": "核心金句",
+      "stats": [{{"label": "指标名", "value": "85%"}}, {{"label": "指标名", "value": "10x"}}],
+      "image_prompt": "配图描述（英文）"
     }},
     {{
       "type": "ending",
@@ -144,162 +147,114 @@ def generate_xhs_outline(outline: PresentationOutline) -> list[dict]:
     return data.get("cards", [])
 
 
-def _render_cover_html(card: dict, style: dict) -> str:
-    tags_html = "".join(
-        f'<span class="tag">#{t}</span>' for t in card.get("tags", [])
-    )
-    return f"""<div class="card cover">
-  <div class="cover-deco"></div>
-  <h1>{card.get("title", "")}</h1>
-  <p class="subtitle">{card.get("subtitle", "")}</p>
-  <div class="tags">{tags_html}</div>
-</div>"""
+def _stats_html(stats: list[dict], style: dict) -> str:
+    """Render stats as visual data cards."""
+    if not stats:
+        return ""
+    items = []
+    for s in stats[:4]:
+        items.append(f'''<div class="stat-item">
+  <div class="stat-value">{s.get("value", "")}</div>
+  <div class="stat-label">{s.get("label", "")}</div>
+</div>''')
+    return f'<div class="stats-row">{"".join(items)}</div>'
 
 
-def _render_content_html(card: dict, index: int, style: dict) -> str:
-    points_html = "".join(
-        f'<div class="point"><span class="point-num">{i+1}</span><span>{p}</span></div>'
-        for i, p in enumerate(card.get("points", []))
-    )
-    highlight = card.get("highlight", "")
-    highlight_html = f'<div class="highlight">{highlight}</div>' if highlight else ""
-    return f"""<div class="card content">
-  <div class="card-num">{index:02d}</div>
-  <h2>{card.get("title", "")}</h2>
-  <div class="points">{points_html}</div>
-  {highlight_html}
-</div>"""
+def _img_html(img_b64: str) -> str:
+    if not img_b64:
+        return ""
+    return f'<div class="card-img"><img src="data:image/png;base64,{img_b64}" /></div>'
 
 
-def _render_ending_html(card: dict, style: dict) -> str:
-    tags_html = "".join(
-        f'<span class="tag">#{t}</span>' for t in card.get("tags", [])
-    )
-    return f"""<div class="card ending">
-  <h2>{card.get("title", "")}</h2>
-  <p class="cta">{card.get("cta", "")}</p>
-  <div class="tags">{tags_html}</div>
-  <div class="footer">点赞 ❤️ 收藏 ⭐ 关注 ➕</div>
-</div>"""
-
-
-def build_xhs_html(cards: list[dict], style_name: str = "notion") -> list[str]:
-    """Build individual HTML pages for each XHS card. Returns list of full HTML strings."""
+def build_xhs_html(cards: list[dict], style_name: str = "notion", card_images: list[str] = None) -> list[str]:
+    """Build HTML pages for XHS cards with data viz and optional AI images."""
+    import base64 as b64mod
     style = XHS_STYLES.get(style_name, XHS_STYLES["notion"])
+    if card_images is None:
+        card_images = [""] * len(cards)
+    while len(card_images) < len(cards):
+        card_images.append("")
 
     css = f"""
-    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-    body {{
-      width: 1080px; height: 1440px;
-      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
-      overflow: hidden;
-    }}
-    .card {{
-      width: 1080px; height: 1440px;
-      background: {style['bg']};
-      display: flex; flex-direction: column;
-      justify-content: center; align-items: center;
-      padding: 80px 72px;
-      position: relative;
-    }}
+    * {{ margin:0; padding:0; box-sizing:border-box; }}
+    body {{ width:1080px; height:1440px; font-family:-apple-system,"PingFang SC","Noto Sans SC",sans-serif; overflow:hidden; }}
+    .card {{ width:1080px; height:1440px; background:{style['bg']}; display:flex; flex-direction:column; padding:72px 64px; position:relative; }}
     /* Cover */
-    .card.cover {{ text-align: center; }}
-    .card.cover .cover-deco {{
-      width: 80px; height: 6px;
-      background: {style['accent']};
-      border-radius: 3px;
-      margin-bottom: 48px;
-    }}
-    .card.cover h1 {{
-      font-size: 64px; font-weight: 800;
-      color: {style['accent']};
-      line-height: 1.3; margin-bottom: 28px;
-      max-width: 900px;
-    }}
-    .card.cover .subtitle {{
-      font-size: 32px; color: {style['text_secondary']};
-      margin-bottom: 48px; line-height: 1.5;
-    }}
+    .card.cover {{ justify-content:center; align-items:center; text-align:center; }}
+    .card.cover .deco {{ width:80px; height:5px; background:{style['accent']}; border-radius:3px; margin-bottom:40px; }}
+    .card.cover h1 {{ font-size:60px; font-weight:800; color:{style['accent']}; line-height:1.3; margin-bottom:24px; max-width:900px; }}
+    .card.cover .sub {{ font-size:28px; color:{style['text_secondary']}; margin-bottom:40px; line-height:1.5; }}
+    .card.cover .card-img {{ margin-bottom:40px; }}
+    .card.cover .card-img img {{ width:400px; height:400px; object-fit:cover; border-radius:24px; }}
+    .tags {{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }}
+    .tag {{ padding:8px 22px; border-radius:20px; background:{style['tag_bg']}; color:{style['text']}; font-size:22px; }}
     /* Content */
-    .card.content {{ align-items: flex-start; }}
-    .card.content .card-num {{
-      font-size: 20px; color: {style['accent2']};
-      font-weight: 700; margin-bottom: 16px;
-      letter-spacing: 2px;
-    }}
-    .card.content h2 {{
-      font-size: 48px; font-weight: 700;
-      color: {style['text']}; line-height: 1.3;
-      margin-bottom: 40px;
-    }}
-    .card.content .points {{ width: 100%; }}
-    .card.content .point {{
-      display: flex; align-items: flex-start;
-      margin-bottom: 28px; font-size: 30px;
-      color: {style['text']}; line-height: 1.6;
-    }}
-    .card.content .point-num {{
-      background: {style['accent']};
-      color: {style['bg']};
-      width: 44px; height: 44px;
-      border-radius: 22px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px; font-weight: 700;
-      margin-right: 20px; flex-shrink: 0;
-      margin-top: 4px;
-    }}
-    .card.content .highlight {{
-      margin-top: 40px; padding: 32px 36px;
-      background: {style['card_bg']};
-      border-left: 6px solid {style['accent']};
-      border-radius: 0 16px 16px 0;
-      font-size: 28px; color: {style['accent']};
-      font-weight: 600; line-height: 1.6;
-      width: 100%;
-    }}
+    .card.content {{ justify-content:flex-start; }}
+    .card.content .top-row {{ display:flex; align-items:center; margin-bottom:32px; }}
+    .card.content .card-num {{ font-size:18px; color:{style['accent2']}; font-weight:700; margin-right:12px; }}
+    .card.content h2 {{ font-size:44px; font-weight:700; color:{style['text']}; line-height:1.3; margin-bottom:28px; }}
+    .card.content .card-img {{ margin-bottom:28px; }}
+    .card.content .card-img img {{ width:100%; max-height:400px; object-fit:cover; border-radius:16px; }}
+    .card.content .points {{ width:100%; }}
+    .card.content .point {{ display:flex; align-items:flex-start; margin-bottom:20px; font-size:28px; color:{style['text']}; line-height:1.6; }}
+    .card.content .point-num {{ background:{style['accent']}; color:{style['bg']}; min-width:40px; height:40px; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; margin-right:16px; flex-shrink:0; margin-top:4px; }}
+    .card.content .highlight {{ margin-top:24px; padding:24px 28px; background:{style['card_bg']}; border-left:5px solid {style['accent']}; border-radius:0 12px 12px 0; font-size:26px; color:{style['accent']}; font-weight:600; line-height:1.6; }}
+    /* Stats */
+    .stats-row {{ display:flex; gap:16px; margin:24px 0; width:100%; }}
+    .stat-item {{ flex:1; background:{style['card_bg']}; border:2px solid {style['border']}; border-radius:16px; padding:20px; text-align:center; }}
+    .stat-value {{ font-size:36px; font-weight:800; color:{style['accent']}; margin-bottom:8px; }}
+    .stat-label {{ font-size:18px; color:{style['text_secondary']}; }}
     /* Ending */
-    .card.ending {{ text-align: center; }}
-    .card.ending h2 {{
-      font-size: 52px; font-weight: 800;
-      color: {style['text']}; margin-bottom: 32px;
-    }}
-    .card.ending .cta {{
-      font-size: 30px; color: {style['text_secondary']};
-      margin-bottom: 48px; line-height: 1.6;
-    }}
-    .card.ending .footer {{
-      margin-top: 48px; font-size: 28px;
-      color: {style['accent']}; font-weight: 600;
-      letter-spacing: 4px;
-    }}
-    /* Tags */
-    .tags {{
-      display: flex; flex-wrap: wrap;
-      gap: 12px; justify-content: center;
-    }}
-    .tag {{
-      padding: 8px 24px; border-radius: 20px;
-      background: {style['tag_bg']}; color: {style['text']};
-      font-size: 24px;
-    }}
+    .card.ending {{ justify-content:center; align-items:center; text-align:center; }}
+    .card.ending h2 {{ font-size:48px; font-weight:800; color:{style['text']}; margin-bottom:28px; }}
+    .card.ending .cta {{ font-size:28px; color:{style['text_secondary']}; margin-bottom:40px; line-height:1.6; }}
+    .card.ending .footer {{ font-size:26px; color:{style['accent']}; font-weight:600; letter-spacing:3px; }}
     """
 
-    html_template = """<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>{css}</style></head>
-<body>{body}</body></html>"""
-
+    tpl = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head><body>{body}</body></html>'
     pages = []
     content_idx = 0
-    for card in cards:
-        card_type = card.get("type", "content")
-        if card_type == "cover":
-            body = _render_cover_html(card, style)
-        elif card_type == "ending":
-            body = _render_ending_html(card, style)
+
+    for i, card in enumerate(cards):
+        ct = card.get("type", "content")
+        img = _img_html(card_images[i])
+
+        if ct == "cover":
+            tags = "".join(f'<span class="tag">#{t}</span>' for t in card.get("tags", []))
+            body = f'''<div class="card cover">
+  <div class="deco"></div>
+  {img}
+  <h1>{card.get("title","")}</h1>
+  <div class="sub">{card.get("subtitle","")}</div>
+  <div class="tags">{tags}</div>
+</div>'''
+        elif ct == "ending":
+            tags = "".join(f'<span class="tag">#{t}</span>' for t in card.get("tags", []))
+            body = f'''<div class="card ending">
+  {img}
+  <h2>{card.get("title","")}</h2>
+  <div class="cta">{card.get("cta","")}</div>
+  <div class="tags">{tags}</div>
+  <div class="footer">点赞 ❤️  收藏 ⭐  关注 ➕</div>
+</div>'''
         else:
             content_idx += 1
-            body = _render_content_html(card, content_idx, style)
-        pages.append(html_template.format(css=css, body=body))
+            pts = "".join(
+                f'<div class="point"><span class="point-num">{j+1}</span><span>{p}</span></div>'
+                for j, p in enumerate(card.get("points", []))
+            )
+            hl = card.get("highlight", "")
+            hl_html = f'<div class="highlight">{hl}</div>' if hl else ""
+            stats = _stats_html(card.get("stats", []), style)
+            body = f'''<div class="card content">
+  <div class="top-row"><span class="card-num">{content_idx:02d}</span></div>
+  <h2>{card.get("title","")}</h2>
+  {img}
+  {stats}
+  <div class="points">{pts}</div>
+  {hl_html}
+</div>'''
+        pages.append(tpl.format(css=css, body=body))
 
     return pages
 
@@ -308,107 +263,47 @@ async def render_xhs_images(
     outline: PresentationOutline,
     style: str = "notion",
 ) -> tuple[list[dict], list[bytes]]:
-    """Generate XHS cards and render them as images.
-
-    Returns (cards_data, image_bytes_list).
-    """
+    """Generate XHS cards with AI images and render as final images."""
     from playwright.async_api import async_playwright
+    from core.image_gen import generate_batch
+    import base64
 
-    # Step 1: Generate XHS outline
     cards = generate_xhs_outline(outline)
     if not cards:
         return [], []
 
-    # Step 2: Build HTML
-    html_pages = build_xhs_html(cards, style)
+    # Generate AI images for cards that have image_prompt
+    prompts = []
+    for card in cards:
+        prompt = card.get("image_prompt", "")
+        if prompt:
+            prompts.append(prompt + ". Cute illustration, flat design, pastel colors, no text.")
+        else:
+            prompts.append("")
 
-    # Step 3: Render to images
+    # Only generate for non-empty prompts
+    has_prompts = [i for i, p in enumerate(prompts) if p]
+    card_images_b64 = [""] * len(cards)
+
+    if has_prompts:
+        actual_prompts = [prompts[i] for i in has_prompts]
+        logger.info("Generating %d XHS card images...", len(actual_prompts))
+        raw_images = generate_batch(actual_prompts, size="1024*1024")
+        for idx, img_bytes in zip(has_prompts, raw_images):
+            if img_bytes:
+                card_images_b64[idx] = base64.b64encode(img_bytes).decode()
+
+    # Build HTML with images
+    html_pages = build_xhs_html(cards, style, card_images_b64)
+
+    # Render
     images = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page(viewport={"width": 1080, "height": 1440})
-
         for html in html_pages:
             await page.set_content(html, wait_until="networkidle")
-            screenshot = await page.screenshot(type="png")
-            images.append(screenshot)
-
+            images.append(await page.screenshot(type="png"))
         await browser.close()
 
     return cards, images
-
-
-def export_xhs_prompts(cards: list[dict], outline: PresentationOutline, output_dir: str | Path) -> Path:
-    """Export XHS card data and prompts for baoyu-imagine generation."""
-    out = Path(output_dir) / "xhs-images"
-    out.mkdir(parents=True, exist_ok=True)
-    prompts_dir = out / "prompts"
-    prompts_dir.mkdir(exist_ok=True)
-
-    # Save source content
-    source = f"# {outline.title}\n\n> {outline.subtitle}\n\n"
-    for sec in outline.sections:
-        source += f"## {sec.title}\n"
-        for b in sec.bullets:
-            source += f"- {b}\n"
-        source += "\n"
-    (out / "source.md").write_text(source, encoding="utf-8")
-
-    # Save outline
-    (out / "outline.json").write_text(
-        json.dumps({"cards": cards}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-    # Generate prompts for each card
-    for i, card in enumerate(cards):
-        card_type = card.get("type", "content")
-        title_slug = card.get("title", "card")[:20].replace(" ", "-").lower()
-        prompt_file = prompts_dir / f"{i+1:02d}-{card_type}-{title_slug}.md"
-
-        prompt = _build_image_prompt(card, i)
-        prompt_file.write_text(prompt, encoding="utf-8")
-
-    return out
-
-
-def _build_image_prompt(card: dict, index: int) -> str:
-    """Build an image generation prompt for a single XHS card."""
-    card_type = card.get("type", "content")
-    title = card.get("title", "")
-
-    if card_type == "cover":
-        return f"""Create a Xiaohongshu (Little Red Book) cover infographic card.
-Style: Cute cartoon illustration, pastel colors, hand-drawn elements.
-Aspect ratio: 3:4 (portrait, 1080x1440px)
-Content:
-- Main title: "{title}"
-- Subtitle: "{card.get('subtitle', '')}"
-- Tags: {', '.join(card.get('tags', []))}
-- Decorations: sparkles, hearts, cute doodles
-- Typography: Bold, eye-catching Chinese title with decorative elements
-"""
-    elif card_type == "ending":
-        return f"""Create a Xiaohongshu (Little Red Book) ending/CTA infographic card.
-Style: Cute cartoon illustration, pastel colors, warm and inviting.
-Aspect ratio: 3:4 (portrait, 1080x1440px)
-Content:
-- Title: "{title}"
-- Call to action: "{card.get('cta', '')}"
-- Footer: "点赞 ❤️ 收藏 ⭐ 关注 ➕"
-- Tags: {', '.join(card.get('tags', []))}
-"""
-    else:
-        points = card.get("points", [])
-        points_text = "\n".join(f"  {i+1}. {p}" for i, p in enumerate(points))
-        highlight = card.get("highlight", "")
-        return f"""Create a Xiaohongshu (Little Red Book) content infographic card.
-Style: Cute cartoon illustration, clean layout, numbered bullet points.
-Aspect ratio: 3:4 (portrait, 1080x1440px)
-Content:
-- Card number: {index+1:02d}
-- Title: "{title}"
-- Key points:
-{points_text}
-- Highlight quote: "{highlight}"
-"""
